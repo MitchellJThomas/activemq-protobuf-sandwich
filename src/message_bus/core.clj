@@ -1,14 +1,17 @@
 (ns message-bus.core
   (:require
-   [clojure.core.async :refer [go timeout put! <! chan >!]])
+   [clojure.core.async :refer [go timeout put! <! chan >! close!]]
+   [clojure.tools.logging :as log])
   (:import
-   [org.apache.activemq ActiveMQConnectionFactory ActiveMQTopic])
+   [javax.jms MessageListener Session BytesMessage TextMessage]
+   [org.apache.activemq ActiveMQConnectionFactory]
+   [org.apache.activemq.command ActiveMQTopic])
   (:gen-class))
 
 (defn -main
   "I don't do a whole lot ... yet."
   [& args]
-  (println "Hello, World!"))
+  (log/info "Hello, World!"))
 
 (comment
   (defn start-activemq-session!
@@ -34,19 +37,18 @@
     [session topic-name]
     (let [ch (chan)
           s (:session session)
-          ml (reify java.jms.MessageListener
+          ml (reify MessageListener
                (onMessage [this mess]
                  (let [cl (class mess)]
                    (cond
-                     (instance? javax.jmx.BytesMessage cl) (let [ba (byte-array (.getBodyLength mess))
+                     (instance? BytesMessage cl) (let [ba (byte-array (.getBodyLength mess))
                                                                  _ (.readBytes mess ba)]
                                                              (>! ch ba))
-                     (instance? javax.jmx.TextMessage cl) (let [tx (.getText mess)]
+                     (instance? TextMessage cl) (let [tx (.getText mess)]
                                                             (>! ch tx)))
                    (.acknowledge mess)
                    (if (.isClosed s) (close! ch)))))
           topic (ActiveMQTopic. topic-name)
           consumer (.createConsumer s topic ml)]
       ch))
-
   )
