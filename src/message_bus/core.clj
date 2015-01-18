@@ -1,5 +1,6 @@
 (ns message-bus.core
   (:require
+   [clojure.edn]
    [clojure.core.async :refer [go timeout put! <! chan >!! close! take! go-loop]]
    [clojure.tools.logging :as log])
   (:import
@@ -44,11 +45,16 @@
         ml (reify MessageListener
              (onMessage [this mess]
                (cond
-                 (instance? BytesMessage mess) (let [ba (byte-array (.getBodyLength mess))
-                                                     _ (.readBytes mess ba)]
-                                                 (>!! ch ba))
-                 (instance? TextMessage mess) (let [tx (.getText mess)]
-                                                (>!! ch (read-string tx)))
+                 (instance? BytesMessage mess)
+                 (let [ba (byte-array (.getBodyLength mess))
+                       _ (.readBytes mess ba)]
+                   (>!! ch ba))
+
+                 (instance? TextMessage mess)
+                 (let [tx (.getText mess)]
+                   (>!! ch (clojure.edn/read-string tx)))
+                 (clojure.edn/read)
+
                  :else (log/warn "Unhandled message " mess))
                (.acknowledge mess)
                (if (.isClosed s) (close! ch))))
@@ -58,7 +64,8 @@
 
 (defn message-bus-publisher
   "Returns a publishing chan for which puts will be published on the
-  provided topic using the given session.  The chan will close when the session has closed."
+  provided topic using the given session.  The chan will close when
+  the session has closed."
   [session topic-name]
   (let [cha (chan)
         ses (:session session)
@@ -67,12 +74,11 @@
         _ (go
             (loop []
               (when-let [mes (<! cha)]
-                (let [txt-mes (.createTextMessage ses mes)]
+                (let [txt-mes (.createTextMessage ses (str mes))]
                   (.publish pub txt-mes)
                   (if (.isClosed ses) (close! cha))
                   (recur))))
-            true)
-        ]
+            true)]
     cha))
 
 (comment
@@ -80,19 +86,28 @@
   (def c (message-bus-subscriber ses "pine"))
   (def p (message-bus-publisher ses "pine"))
 
-  (def pu (.createPublisher (:session ses) (ActiveMQTopic. "pine")))
-  (.getConnectionInfo  (:connection  ses))
-  (.getTopic p)
-
   (go-loop []
     (when-let [m (<! c)]
-      (log/info "this: " (:this m))
+      (log/info "this: " m)
       (recur)))
-  
-  (.publish p (.createTextMessage  (:session ses) (str {:this (rand) :that (rand)})))
 
   (>!! p (str {:this (rand) :that (rand)}))
+  (>!! p  {:this (rand) :that (rand)})
+  (>!! p  [1 2 3])
+  (def ba  (byte-array [(byte 0x43) 
+                        (byte 0x6c)
+                        (byte 0x6f)
+                        (byte 0x6a)
+                        (byte 0x75)
+                        (byte 0x72)
+                        (byte 0x65)
+                        (byte 0x21)]))
+  (>!! p )
   
   (close! c)
   (stop-activemq-session! ses)
-  )
+
+  (def pu (.createPublisher (:session ses) (ActiveMQTopic. "pine")))
+  (.publish pu (.createTextMessage  (:session ses) (str {:this (rand) :that (rand)})))
+  (.getConnectionInfo  (:connection  ses))
+  (.getTopic pu)  )
