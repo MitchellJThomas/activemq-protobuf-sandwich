@@ -2,7 +2,8 @@
   (:require
    [clojure.edn]
    [clojure.core.async :refer [go timeout put! <! chan >!! close! take! go-loop]]
-   [clojure.tools.logging :as log])
+   [clojure.tools.logging :as log]
+   [message-bus.messages :as m])
   (:import
    [javax.jms MessageListener Session BytesMessage TextMessage]
    [org.apache.activemq ActiveMQConnectionFactory]
@@ -36,7 +37,7 @@
        (.close connection)
        true))
 
-(defn message-bus-subscriber
+(defn message-bus-consumer
   "Returns a chan subscribed to the provided topic using the provided
   session.  The chan will close when the session has been terminated."
   [session topic-name]
@@ -51,9 +52,9 @@
                    (>!! ch ba))
 
                  (instance? TextMessage mess)
-                 (let [tx (.getText mess)]
-                   (>!! ch (clojure.edn/read-string tx)))
-                 (clojure.edn/read)
+                 (let [tx (.getText mess)
+                       dat (clojure.edn/read-string tx)]
+                   (>!! ch dat))
 
                  :else (log/warn "Unhandled message " mess))
                (.acknowledge mess)
@@ -61,6 +62,19 @@
         topic (ActiveMQTopic. topic-name)
         consumer (.createConsumer s topic ml)]
     ch))
+
+(defmulti activemq-message
+  "Build an ActiveMQ message based on the outgoing data type"
+  (fn [data ses] (class data)))
+
+(defmethod activemq-message :default
+  [data sess]
+  (.createTextMessage sess (prn-str data)))
+
+(defmethod activemq-message (class (byte-array []))
+  [data sess]
+  (doto (.createBytesMessage sess)
+             (.writeBytes data)))
 
 (defn message-bus-publisher
   "Returns a publishing chan for which puts will be published on the
@@ -74,40 +88,45 @@
         _ (go
             (loop []
               (when-let [mes (<! cha)]
-                (let [txt-mes (.createTextMessage ses (str mes))]
-                  (.publish pub txt-mes)
-                  (if (.isClosed ses) (close! cha))
-                  (recur))))
+                (.publish pub (activemq-message mes ses))
+                (if (.isClosed ses) (close! cha))
+                (recur)))
             true)]
     cha))
 
 (comment
   (def ses (start-activemq-session! default-url :username "mthomas" :password "foo"))
-  (def c (message-bus-subscriber ses "pine"))
+  (def c (message-bus-consumer ses "pine"))
   (def p (message-bus-publisher ses "pine"))
 
-  (go-loop []
-    (when-let [m (<! c)]
-      (log/info "this: " m)
-      (recur)))
+  (def consumer (go-loop []
+                  (when-let [m (<! c)]
+                    (log/info "this: " m)
+                    (recur))))
 
-  (>!! p (str {:this (rand) :that (rand)}))
-  (>!! p  {:this (rand) :that (rand)})
-  (>!! p  [1 2 3])
-  (def ba  (byte-array [(byte 0x43) 
-                        (byte 0x6c)
-                        (byte 0x6f)
-                        (byte 0x6a)
-                        (byte 0x75)
-                        (byte 0x72)
-                        (byte 0x65)
-                        (byte 0x21)]))
-  (>!! p )
-  
+  (>!! p "hey!")
+  (>!! p [{:this (rand) :that (rand)} [1 2 3] {:ding true :dong false}])
+
+  (def pcon (message-bus-consumer ses "person"))
+  (def ppub (message-bus-publisher ses "person"))
+  (def person-consumer (go-loop []
+                         (when-let [person-bytes (<! pcon)]
+                           (log/info "m: " person-bytes)
+                           (log/info "person: " (m/person-builder person-bytes))
+                           (recur))))
+
+  (def p-bytes (m/person-builder {:id 1 :name "Mitch" :email "mthomas@tripwire.com"
+                                  :likes ["biking" "skiing" "futsal" "music"]}))
+  (>!! ppub p-bytes)
+  (close! pcon)
+  (close! ppub)
+
   (close! c)
   (stop-activemq-session! ses)
 
   (def pu (.createPublisher (:session ses) (ActiveMQTopic. "pine")))
   (.publish pu (.createTextMessage  (:session ses) (str {:this (rand) :that (rand)})))
   (.getConnectionInfo  (:connection  ses))
-  (.getTopic pu)  )
+  (.getTopic pu)
+    
+  )

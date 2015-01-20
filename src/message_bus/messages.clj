@@ -12,21 +12,26 @@
   class)
 
 (defmethod person-builder (class (byte-array []))
-  [^bytes person-bytes]
+  [person-bytes]
   (try 
-    (p/protobuf-load Person person-bytes)
+    (p/protobuf-load proto-person person-bytes)
     (catch com.google.protobuf.InvalidProtocolBufferException e nil)))
 
-(defmethod person-builder (class {})
+(defmethod person-builder clojure.lang.IPersistentMap
   [person-map]
   (p/protobuf-dump (p/protobuf proto-person person-map)))
 
 (comment
-  (def pm {:id 4 :name "Bob" :email "bob@example.com"}) 
+  (def pm {:id 3 :name "Bob" :email "bob@example.com"})
+  (class pm)
 
-  (def p (p/protobuf proto-person pm))
+  (def hi (make-hierarchy))
+
+  (person-builder  (person-builder pm))
+  (person-builder  (person-builder {:id 1 :name "f"}))
 
   (p/protobuf-schema proto-person)
+  
 
   (def new-p (-> p
                (assoc :likes ["cooking" "swimming" "fishing"] :name "Ralph")
