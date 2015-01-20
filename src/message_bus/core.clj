@@ -1,7 +1,7 @@
 (ns message-bus.core
   (:require
    [clojure.edn]
-   [clojure.core.async :refer [go timeout put! <! chan >!! close! take! go-loop]]
+   [clojure.core.async :refer [go timeout put! <! >! chan >!! close! take! go-loop]]
    [clojure.tools.logging :as log]
    [message-bus.messages :as m])
   (:import
@@ -12,10 +12,21 @@
 
 (def ^:private default-url "nio://0.0.0.0:61616")
 
-(defn -main
-  "Subscribe and publish messages using a message bus"
-  [& args]
-  (log/info "Publishing text on topic " (if-let [f (first args)] f default-url) ))
+(def ^:private people
+  [{:name "Mitch" :email "mwhite@foo.com"
+    :likes ["laying around" "beer" "liver and onions"]}
+   {:name "Julie" :email "jpoodle@foo.com"
+    :likes ["tv" "wine" "dogs"]}
+   {:name "Lorrie" :email "lorrie@bar.com"
+    :likes ["cars" "rain"]}
+   {:name "Mac" :email "mac@bar.com"
+    :likes ["grass" "gardening" "greens"]}
+   {:name "Spock" :email "spock@enterprise.com"
+    :likes ["the nerve pinch" "logic" "Capt. Kirk"]}
+   {:name "Capt. Kirk" :email "captain@enterprise.com"
+    :likes ["the ladies" "adventure" "tribbles"]}
+   ])
+
 
 (defn start-activemq-session!
   [broker & {username :username password :password max-connections :max-connections :or {max-connections 1}}]
@@ -37,7 +48,7 @@
        (.close connection)
        true))
 
-(defn message-bus-consumer
+(defn start-consumer!
   "Returns a chan subscribed to the provided topic using the provided
   session.  The chan will close when the session has been terminated."
   [session topic-name]
@@ -76,7 +87,7 @@
   (doto (.createBytesMessage sess)
              (.writeBytes data)))
 
-(defn message-bus-publisher
+(defn start-publisher!
   "Returns a publishing chan for which puts will be published on the
   provided topic using the given session.  The chan will close when
   the session has closed."
@@ -94,8 +105,55 @@
             true)]
     cha))
 
+(defn- hook-shutdown!
+  [f]
+  (doto (Runtime/getRuntime)
+    (.addShutdownHook (Thread. f))))
+
+(defn -main
+  "Subscribe and publish messages using a message bus"
+  [& args]
+  (let [f (first args)
+        lock (promise)]
+    (cond
+      (= f "publisher")
+      (let [sess (start-activemq-session! default-url)
+            pub (start-publisher! sess "person")]
+        (log/info "Created a publisher process on topic 'person'")
+        (go-loop []
+          (let [p (nth people (rand-int (count people)))
+                wid (assoc p :id (rand-int 100))
+                data (m/person-builder wid)]
+            (>! pub data)
+            (<! (timeout 1000))
+            (recur)))
+        (hook-shutdown! #(deliver lock :release))
+        (hook-shutdown! #(log/info "Shutting down the publisher"))
+        (hook-shutdown! #(stop-activemq-session! sess))
+        (deref lock)
+        (System/exit 0))
+
+      (= f "consumer")
+      (let [sess (start-activemq-session! default-url)
+            con (start-consumer! sess "person")]
+        (log/info "Created a consumer process on topic 'person'")
+        (go-loop []
+          (when-let [person-bytes (<! con)]
+            (log/info "person: " (m/person-builder person-bytes))
+            (recur)))
+        (hook-shutdown! #(deliver lock :release))
+        (hook-shutdown! #(log/info "Shutting down the consumer"))
+        (hook-shutdown! #(stop-activemq-session! sess))
+        (deref lock)
+        (System/exit 0))
+
+      :else
+      (log/info "Good day. Please provide either 'consumer' or 'publisher' as an argument"))))
+
+
 (comment
   (def ses (start-activemq-session! default-url :username "mthomas" :password "foo"))
+  (start-activemq-session! default-url)
   (def c (message-bus-consumer ses "pine"))
   (def p (message-bus-publisher ses "pine"))
 
