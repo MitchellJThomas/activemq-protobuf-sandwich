@@ -5,7 +5,8 @@
                  [org.apache.activemq/activemq-client "5.10.0"]
                  [org.flatland/protobuf "0.8.1"]
                  [org.clojure/tools.logging "0.3.1"]
-                 [org.slf4j/slf4j-log4j12 "1.6.2"]]
+                 [org.slf4j/slf4j-log4j12 "1.7.10"]]
+  :plugins [[lein-protobuf "0.4.1"]]
   :main ^:skip-aot message-bus.core
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all}})
