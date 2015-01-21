@@ -1,10 +1,14 @@
-# message-bus
+# Apache ActiveMQ and Google Protobuf 
 
-An example of using ActiveMQ and Protobuf with Clojure. 
+A quickly assembled meal composed of
+[Apache ActiveMQ](http://activemq.apache.org/download.html) and [Google
+Probobuf](https://code.google.com/p/protobuf/).  I call this a
+sandwich because its a "quick and dirty" implementation with very few
+extra bells and whistles over the existing dependencies.
 
 ## Usage
 
-Compile the protobuf file
+Compile the example protobuf file
     $ lein protobuf
 
 Download an
