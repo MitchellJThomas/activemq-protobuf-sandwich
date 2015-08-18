@@ -1,12 +1,11 @@
-# Introduction to message-bus
+# Introduction to Apache ActiveMQ and Google Protobuf
 
 This bit of code is intended to be an example of how to interact with
 an ActiveMQ message bus using Protobuf serialized messages.
 
-These are pieces to this code base
-1. Subscribing to ActiveMQ topics via core.async channels
-2. Publising to ActiveMQ topics using a function
-3. Deserializing Protobuf messages from a core.async channel.
-
-It is intended to use the ActiveMQ portion of this library can be used
-without the Protobuf portion.
+These are the features of this code base
+1. Subscribing to and consuming from ActiveMQ topics/queues via core.async channels
+2. Message (de)serialization through channel construction and the
+features of [transducers](http://clojure.org/transducers)
+3. An example of how to do (de)serialization of Protobuf messages from
+a core.async channel.

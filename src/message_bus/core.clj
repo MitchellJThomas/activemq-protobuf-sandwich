@@ -27,7 +27,6 @@
     :likes ["the ladies" "adventure" "tribbles"]}
    ])
 
-
 (defn start-activemq-session!
   [broker & {username :username password :password max-connections :max-connections :or {max-connections 1}}]
   "Returns an ActiveMQ connection which has been started.
@@ -152,7 +151,7 @@
 
 
 (comment
-  (def ses (start-activemq-session! default-url :username "mthomas" :password "foo"))
+  (def ses (start-activemq-session! default-url :username "fredly" :password "foo"))
   (start-activemq-session! default-url)
   (def c (message-bus-consumer ses "pine"))
   (def p (message-bus-publisher ses "pine"))
@@ -173,7 +172,7 @@
                            (log/info "person: " (m/person-builder person-bytes))
                            (recur))))
 
-  (def p-bytes (m/person-builder {:id 1 :name "Mitch" :email "mthomas@tripwire.com"
+  (def p-bytes (m/person-builder {:id 1 :name "Mitch" :email "mthomas@thisnthat.com"
                                   :likes ["biking" "skiing" "futsal" "music"]}))
   (>!! ppub p-bytes)
   (close! pcon)
@@ -186,5 +185,4 @@
   (.publish pu (.createTextMessage  (:session ses) (str {:this (rand) :that (rand)})))
   (.getConnectionInfo  (:connection  ses))
   (.getTopic pu)
-    
   )

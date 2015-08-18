@@ -1,5 +1,6 @@
-(defproject message-bus "0.1.0-SNAPSHOT"
-  :description "An example of using ActiveMQ and Protobuf with Clojure."
+(defproject activemq-protobuf-sandwich "0.1.0"
+  :url "https://github.com/MitchellJThomas/activemq-protobuf-sandwich"
+  :description "An example of using Appche ActiveMQ and Google Protobuf with Clojure."
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [org.apache.activemq/activemq-client "5.10.0"]
@@ -9,4 +10,5 @@
   :plugins [[lein-protobuf "0.4.1"]]
   :main ^:skip-aot message-bus.core
   :target-path "target/%s"
-  :profiles {:uberjar {:aot :all}})
+  :profiles {:uberjar {:aot :all}}
+  )

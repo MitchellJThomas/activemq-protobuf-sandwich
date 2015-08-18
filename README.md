@@ -1,6 +1,6 @@
 # Apache ActiveMQ and Google Protobuf 
 A quickly assembled meal composed of
-[Apache ActiveMQ](http://activemq.apache.org/download.html) and [Google
+[Apache ActiveMQ](http://activemq.apache.org) and [Google
 Probobuf](https://code.google.com/p/protobuf/).  I call this a
 sandwich because its a "quick and dirty" implementation with very few
 extra bells and whistles over the existing dependencies.
