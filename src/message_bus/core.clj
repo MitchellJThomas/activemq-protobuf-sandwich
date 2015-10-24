@@ -38,21 +38,24 @@
         connection (.createConnection factory username password)
         _ (.start connection)
         session (.createSession connection false Session/AUTO_ACKNOWLEDGE)]
-    {:connection  connection
-     :session session}))
+    (atom {:connection  connection
+           :session session
+           :channels []})))
 
 (defn stop-activemq-session!
-  [{:keys [session connection]}]
-  (do (.close session)
-       (.close connection)
-       true))
-
+  [sess]
+  (let [{:keys [session connection channels]} @sess]
+    (dorun (map close! channels))
+    (.close session)
+    (.close connection)
+    true))
 (defn start-consumer!
   "Returns a chan subscribed to the provided topic using the provided
   session.  The chan will close when the session has been terminated."
   [session topic-name]
   (let [ch (chan)
-        s (:session session)
+        _ (swap! session #(assoc % :channels (conj (% :channels) ch)))
+        s (:session @session)
         ml (reify MessageListener
              (onMessage [this mess]
                (cond
@@ -92,7 +95,8 @@
   the session has closed."
   [session topic-name]
   (let [cha (chan)
-        ses (:session session)
+        _ (swap! session #(assoc % :channels (conj (% :channels) cha)))
+        ses (:session @session)
         top (ActiveMQTopic. topic-name)
         pub (.createPublisher ses top)
         _ (go
@@ -153,9 +157,6 @@
 (comment
   (def ses (start-activemq-session! default-url :username "fredly" :password "foo"))
   (start-activemq-session! default-url)
-  (def c (message-bus-consumer ses "pine"))
-  (def p (message-bus-publisher ses "pine"))
-
   (def consumer (go-loop []
                   (when-let [m (<! c)]
                     (log/info "this: " m)
@@ -164,8 +165,6 @@
   (>!! p "hey!")
   (>!! p [{:this (rand) :that (rand)} [1 2 3] {:ding true :dong false}])
 
-  (def pcon (message-bus-consumer ses "person"))
-  (def ppub (message-bus-publisher ses "person"))
   (def person-consumer (go-loop []
                          (when-let [person-bytes (<! pcon)]
                            (log/info "m: " person-bytes)
