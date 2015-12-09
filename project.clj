@@ -1,5 +1,7 @@
-(defproject activemq-protobuf-sandwich "0.1.0"
+(defproject mitchelljthomas/activemq-protobuf-sandwich "0.2.0"
   :url "https://github.com/MitchellJThomas/activemq-protobuf-sandwich"
+   :license {:name "Eclipse Public License"
+            :url "http://www.eclipse.org/legal/epl-v10.html"}
   :description "An example of using Appche ActiveMQ and Google Protobuf with Clojure."
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
@@ -7,7 +9,7 @@
                  [org.flatland/protobuf "0.8.1"]
                  [org.clojure/tools.logging "0.3.1"]
                  [org.slf4j/slf4j-log4j12 "1.7.12"]]
-  :plugins [[lein-protobuf "0.4.3"]
+  :plugins [[lein-protobuf "0.4.1"]
             [cider/cider-nrepl "0.10.0-SNAPSHOT"]]
   :main ^:skip-aot message-bus.core
   :target-path "target/%s"
