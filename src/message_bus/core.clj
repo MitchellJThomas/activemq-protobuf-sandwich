@@ -180,9 +180,4 @@
 
   (close! c)
   (stop-activemq-session! ses)
-
-  (def pu (.createPublisher (:session ses) (ActiveMQTopic. "pine")))
-  (.publish pu (.createTextMessage  (:session ses) (str {:this (rand) :that (rand)})))
-  (.getConnectionInfo  (:connection  ses))
-  (.getTopic pu)
   )
