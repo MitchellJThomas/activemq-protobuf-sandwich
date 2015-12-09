@@ -49,6 +49,7 @@
     (.close session)
     (.close connection)
     true))
+
 (defn start-consumer!
   "Returns a chan subscribed to the provided topic using the provided
   session.  The chan will close when the session has been terminated."
