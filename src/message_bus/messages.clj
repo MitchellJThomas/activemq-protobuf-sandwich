@@ -3,7 +3,10 @@
    [clojure.core.async :refer [go timeout put! <! chan >!! go-loop]]
    [flatland.protobuf.core :as p]
    [clojure.tools.logging :as log])
-  (:import [message_bus PersonProtos$Person]))
+  (:import [message_bus
+            PersonProtos$Person
+            PersonProtos$Person$Builder
+            PersonProtos$Person$Type]))
 
 (def ^:private proto-person (p/protodef PersonProtos$Person))
 
@@ -23,11 +26,25 @@
   (p/protobuf-dump (p/protobuf proto-person person-map)))
 
 (comment
-  (def pm {:id 3 :name "Bob" :email "bob@example.com"})
+  (def pm {:id 3 :name "Bob" :email "bob@example.com" :type PersonProtos$Person$Type/NERVOUS})
   (person-builder (person-builder pm))
   (p/protobuf-schema proto-person)
 
-  (def new-p (-> p
-               (assoc :likes ["cooking" "swimming" "fishing"] :name "Ralph")
-               (p/protobuf-dump)))
+  ;; go native
+  (def bobb (-> (doto (PersonProtos$Person/newBuilder)
+                   (.setName "Bob")
+                   (.setId 3)
+                   (.setEmail "bob@example.com")
+                   (.setType PersonProtos$Person$Type/NERVOUS))
+                (.build)
+                (.toByteArray)))
+  (def bob-e (PersonProtos$Person/parseFrom bobb))
+  bob-e
+  (.getName bob-e)
+  (.getDescriptor  (.getType bob-e))
+
+  (clojure.reflect/reflect PersonProtos$Person)
+  (clojure.reflect/reflect PersonProtos$Person$Builder)
+  (clojure.reflect/reflect PersonProtos$Person$Type)
+
   )
