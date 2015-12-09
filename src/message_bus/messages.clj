@@ -26,7 +26,7 @@
   (p/protobuf-dump (p/protobuf proto-person person-map)))
 
 (comment
-  (def pm {:id 3 :name "Bob" :email "bob@example.com" :type PersonProtos$Person$Type/NERVOUS})
+  (def pm {:id 3 :name "Bob" :email "bob@example.com"})
   (person-builder (person-builder pm))
   (p/protobuf-schema proto-person)
 

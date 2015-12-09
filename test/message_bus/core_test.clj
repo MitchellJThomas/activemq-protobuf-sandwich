@@ -3,7 +3,7 @@
             [clojure.core.async :refer [put! close! <!!]]
             [message-bus.core :refer :all]
             [message-bus.messages :refer :all])
-  (:import message_bus PersonProtos$Person))
+  (:import [message_bus PersonProtos$Person$Type]))
 
 (deftest pubsub-test
   (testing "Publishing and Consuming using a local broker"
@@ -12,8 +12,7 @@
           consu (start-consumer! sess dest)
           publi (start-publisher! sess dest)
           person {:id 42 :name "Herbie" :email "hhancock@jazz-foo.com"
-                  :likes ["keys" "funk" "deep dish pizza"]
-                  :type PersonProtos$Person$Type/NERVOUS}
+                  :likes ["keys" "funk" "deep dish pizza"]}
           person_proto (person-builder person)]
       (is (put! publi person_proto))
       (is (= (person-builder  person_proto) (person-builder (<!! consu))))
