@@ -1,8 +1,8 @@
 (defproject mitchelljthomas/activemq-protobuf-sandwich "0.2.0"
   :url "https://github.com/MitchellJThomas/activemq-protobuf-sandwich"
-   :license {:name "Eclipse Public License"
-            :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :description "An example of using Appche ActiveMQ and Google Protobuf with Clojure."
+   :license {:name "The MIT License"
+            :url "http://opensource.org/licenses/MIT"}
+  :description "An example of using Apache ActiveMQ and Google Protobuf with Clojure."
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojure/core.async "0.2.374"]
                  [org.apache.activemq/activemq-client "5.13.0"]
