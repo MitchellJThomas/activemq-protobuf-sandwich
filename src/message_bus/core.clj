@@ -10,22 +10,12 @@
    [org.apache.activemq.command ActiveMQTopic])
   (:gen-class))
 
-(def ^:private default-url "nio://0.0.0.0:61616")
+;; TODO
+;; 1. Allow for queues and topics
+;; 2. create a separate publisher session (allow thread separation to service publisher and consumer functions)
+;; 3. Allow client code choice of auto-ack or not
 
-(def ^:private people
-  [{:name "Mitch" :email "mwhite@foo.com"
-    :likes ["laying around" "beer" "liver and onions"]}
-   {:name "Julie" :email "jpoodle@foo.com"
-    :likes ["tv" "wine" "dogs"]}
-   {:name "Lorrie" :email "lorrie@bar.com"
-    :likes ["cars" "rain"]}
-   {:name "Mac" :email "mac@bar.com"
-    :likes ["grass" "gardening" "greens"]}
-   {:name "Spock" :email "spock@enterprise.com"
-    :likes ["the nerve pinch" "logic" "Capt. Kirk"]}
-   {:name "Capt. Kirk" :email "captain@enterprise.com"
-    :likes ["the ladies" "adventure" "tribbles"]}
-   ])
+(def ^:private default-url "nio://0.0.0.0:61616")
 
 (defn start-activemq-session!
   [broker & {username :username password :password max-connections :max-connections :or {max-connections 1}}]
@@ -72,7 +62,7 @@
 
                  :else (log/warn "Unhandled message " mess))
                (.acknowledge mess)
-               (if (.isClosed s) (close! ch))))
+`               (if (.isClosed s) (close! ch))))
         topic (ActiveMQTopic. topic-name)
         consumer (.createConsumer s topic ml)]
     ch))
@@ -98,8 +88,8 @@
   (let [cha (chan)
         _ (swap! session #(assoc % :channels (conj (% :channels) cha)))
         ses (:session @session)
-        top (ActiveMQTopic. topic-name)
-        pub (.createPublisher ses top)
+        dest (ActiveMQTopic. topic-name)
+        pub (.createPublisher ses dest)
         _ (go
             (loop []
               (when-let [mes (<! cha)]
@@ -118,7 +108,19 @@
   "Subscribe and publish messages using a message bus"
   [& args]
   (let [f (first args)
-        lock (promise)]
+        lock (promise)
+        people [{:name "Mitch" :email "mwhite@foo.com"
+                 :likes ["laying around" "beer" "liver and onions"]}
+                {:name "Julie" :email "jpoodle@foo.com"
+                 :likes ["tv" "wine" "dogs"]}
+                {:name "Lorrie" :email "lorrie@bar.com"
+                 :likes ["cars" "rain"]}
+                {:name "Mac" :email "mac@bar.com"
+                 :likes ["grass" "gardening" "greens"]}
+                {:name "Spock" :email "spock@enterprise.com"
+                 :likes ["the nerve pinch" "logic" "Capt. Kirk"]}
+                {:name "Capt. Kirk" :email "captain@enterprise.com"
+                 :likes ["the ladies" "adventure" "tribbles"]}]]
     (cond
       (= f "publisher")
       (let [sess (start-activemq-session! default-url)
