@@ -11,10 +11,9 @@
   (:gen-class))
 
 ;; TODO
-;; 1. Allow for queues and topics
-;; 2. create a separate publisher session (allow thread separation to service publisher and consumer functions)
-;; 3. Allow client code choice of auto-ack or not
-;; 4. Re-use existing pub-sub channels
+;; 1. create a separate producer session (allow thread separation to service producer and consumer functions)
+;; 2. Allow client code choice of auto-ack or not
+;; 3. Re-use existing prod-cons channels
 
 (def ^:private default-url "nio://0.0.0.0:61616")
 
@@ -40,8 +39,8 @@
 (defn stop-message-bus!
   [message-bus]
   (let [{:keys [session connection channels]} @message-bus
-        {:keys [publishers consumers]} channels]
-    (dorun (map close! (vals publishers)))
+        {:keys [producers consumers]} channels]
+    (dorun (map close! (vals producers)))
     (dorun (map close! (vals consumers)))
     (.close session)
     (.close connection)
@@ -50,7 +49,7 @@
 (defn start-consumer!
   "Returns a chan subscribed to the destination using the provided
   session. The chan will close when the session is terminated.
-  Destination type supports keywords :topic and :destination"
+  Destination type supports keywords :topic and :queue"
   [message-bus {:keys [destination destination-type] :or {destination-type :topic}}]
   {:pre [(= (type @message-bus) MessageBus)
          destination
@@ -97,13 +96,13 @@
 (defn start-producer!
   "Returns a chan for which puts will be published on the
   provided destination using the given message-bus.  The chan will close when
-  the message-bus has closed. Destination type supports keywords :topic and :destination."
+  the message-bus has closed. Destination type supports keywords :topic and :queue."
   [message-bus {:keys [destination destination-type] :or {destination-type :topic}}]
   {:pre [(= (type @message-bus) MessageBus)
          destination
          (contains? #{:topic :queue} destination-type)]}
   (let [cha (chan)
-        _ (swap! message-bus #(assoc-in % [:channels :publishers #{destination destination-type}] cha))
+        _ (swap! message-bus #(assoc-in % [:channels :producers #{destination destination-type}] cha))
         ses (:session @message-bus)
         dest (if (= destination-type :topic)
                (ActiveMQTopic. destination)
@@ -145,7 +144,7 @@
       (= f "producer")
       (let [sess (start-message-bus! default-url)
             pub (start-producer! sess {:destination dest})]
-        (log/info "Created a publisher process on topic 'person'")
+        (log/info "Created a producer process on topic 'person'")
         (go-loop []
           (let [p (nth people (rand-int (count people)))
                 wid (assoc p :id (rand-int 100))
@@ -154,7 +153,7 @@
             (<! (timeout 1000))
             (recur)))
         (hook-shutdown! #(deliver lock :release))
-        (hook-shutdown! #(log/info "Shutting down the publisher"))
+        (hook-shutdown! #(log/info "Shutting down the producer"))
         (hook-shutdown! #(stop-message-bus! sess))
         (deref lock)
         (System/exit 0))
@@ -174,7 +173,7 @@
         (System/exit 0))
 
       :else
-      (log/info "Good day. Please provide either 'consumer' or 'publisher' as an argument"))))
+      (log/info "Good day. Please provide either 'consumer' or 'producer' as an argument"))))
 
 
 (comment
@@ -201,5 +200,5 @@
   (close! ppub)
 
   (close! c)
-  (stop-activemq-session! ses)
+  (stop-message-bus! ses)
   )
