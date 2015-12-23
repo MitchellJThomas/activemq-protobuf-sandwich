@@ -22,4 +22,4 @@ randomly built person objects fly back and forth.
 	lein trampoline run consumer
 	lein trampoline run producer
 
-To end consuming/publishing, quit the process with Cntrl-C.
+To end consuming/producing, quit the process with Cntrl-C.
