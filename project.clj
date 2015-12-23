@@ -2,7 +2,7 @@
   :url "https://github.com/MitchellJThomas/activemq-protobuf-sandwich"
    :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
-  :description "A thin Clojar wrapper for Apache ActiveMQ. A study using ActiveMQ and Google Protobuf together."
+  :description "A thin Clojure, core.async wrapper for Apache ActiveMQ. A study using ActiveMQ and Google Protobuf together."
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojure/core.async "0.2.374"]
                  [org.apache.activemq/activemq-client "5.13.0"]
