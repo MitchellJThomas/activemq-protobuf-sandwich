@@ -7,46 +7,57 @@
   (:import
    [javax.jms MessageListener Session BytesMessage TextMessage]
    [org.apache.activemq ActiveMQConnectionFactory]
-   [org.apache.activemq.command ActiveMQTopic])
+   [org.apache.activemq.command ActiveMQTopic ActiveMQQueue])
   (:gen-class))
 
 ;; TODO
-;; 1. Allow for queues and topics
-;; 2. create a separate publisher session (allow thread separation to service publisher and consumer functions)
-;; 3. Allow client code choice of auto-ack or not
+;; 1. create a separate producer session (allow thread separation to service producer and consumer functions)
+;; 2. Allow client code choice of auto-ack or not
+;; 3. Re-use existing prod-cons channels
 
 (def ^:private default-url "nio://0.0.0.0:61616")
 
-(defn start-activemq-session!
+(defrecord MessageBus [connection session channels])
+
+(defn make-message-bus
+  ([] (->MessageBus nil nil {}))
+  ([connection session] (map->MessageBus {:connection connection :session session :channels {}})))
+
+(defn start-message-bus!
   [broker & {username :username password :password max-connections :max-connections :or {max-connections 1}}]
+  {:pre [(.contains broker "://")]}
   "Returns an ActiveMQ connection which has been started.
      It currently supports the following optional named
-     arguments (refer to ActiveMQ docs for more details about them):
-     :username, :password"
+     arguments (refer to ActiveMQ docs for more details about them): :username, :password"
   (when (nil? broker) (throw (IllegalArgumentException. "No value specified for broker URL!")))
-  (let [factory (ActiveMQConnectionFactory. broker)
-        connection (.createConnection factory username password)
-        _ (.start connection)
-        session (.createSession connection false Session/AUTO_ACKNOWLEDGE)]
-    (atom {:connection  connection
-           :session session
-           :channels []})))
+  (let [f (ActiveMQConnectionFactory. broker)
+        c (.createConnection f username password)
+        _ (.start c)
+        s (.createSession c false Session/AUTO_ACKNOWLEDGE)]
+    (atom (make-message-bus c s))))
 
-(defn stop-activemq-session!
-  [sess]
-  (let [{:keys [session connection channels]} @sess]
-    (dorun (map close! channels))
+(defn stop-message-bus!
+  [message-bus]
+  (let [{:keys [session connection channels]} @message-bus
+        {:keys [producers consumers]} channels]
+    (dorun (map close! (vals producers)))
+    (dorun (map close! (vals consumers)))
     (.close session)
     (.close connection)
-    true))
+    (reset! message-bus (make-message-bus))))
 
 (defn start-consumer!
-  "Returns a chan subscribed to the provided topic using the provided
-  session.  The chan will close when the session has been terminated."
-  [session topic-name]
+  "Returns a chan subscribed to the destination using the provided
+  session. The chan will close when the session is terminated.
+  Destination type supports keywords :topic and :queue"
+  [message-bus {:keys [destination destination-type] :or {destination-type :topic}}]
+  {:pre [(= (type @message-bus) MessageBus)
+         destination
+         (contains? #{:topic :queue} destination-type)]}
   (let [ch (chan)
-        _ (swap! session #(assoc % :channels (conj (% :channels) ch)))
-        s (:session @session)
+        ;; Kinda crazy here... the key to the channel type is a set
+        _ (swap! message-bus #(assoc-in % [:channels :consumers #{destination destination-type}] ch))
+        s (:session @message-bus)
         ml (reify MessageListener
              (onMessage [this mess]
                (cond
@@ -60,11 +71,13 @@
                        dat (clojure.edn/read-string tx)]
                    (>!! ch dat))
 
-                 :else (log/warn "Unhandled message " mess))
+                 :else (log/warn "Unhandled message" mess))
                (.acknowledge mess)
-`               (if (.isClosed s) (close! ch))))
-        topic (ActiveMQTopic. topic-name)
-        consumer (.createConsumer s topic ml)]
+               (if (.isClosed s) (close! ch))))
+        dest (if (= destination-type :topic)
+               (ActiveMQTopic. destination)
+               (ActiveMQQueue. destination))
+        consumer (.createConsumer s dest ml)]
     ch))
 
 (defmulti activemq-message
@@ -80,23 +93,28 @@
   (doto (.createBytesMessage sess)
              (.writeBytes data)))
 
-(defn start-publisher!
-  "Returns a publishing chan for which puts will be published on the
-  provided topic using the given session.  The chan will close when
-  the session has closed."
-  [session topic-name]
+(defn start-producer!
+  "Returns a chan for which puts will be published on the
+  provided destination using the given message-bus.  The chan will close when
+  the message-bus has closed. Destination type supports keywords :topic and :queue."
+  [message-bus {:keys [destination destination-type] :or {destination-type :topic}}]
+  {:pre [(= (type @message-bus) MessageBus)
+         destination
+         (contains? #{:topic :queue} destination-type)]}
   (let [cha (chan)
-        _ (swap! session #(assoc % :channels (conj (% :channels) cha)))
-        ses (:session @session)
-        dest (ActiveMQTopic. topic-name)
-        pub (.createPublisher ses dest)
-        _ (go
-            (loop []
-              (when-let [mes (<! cha)]
-                (.publish pub (activemq-message mes ses))
-                (if (.isClosed ses) (close! cha))
-                (recur)))
-            true)]
+        _ (swap! message-bus #(assoc-in % [:channels :producers #{destination destination-type}] cha))
+        ses (:session @message-bus)
+        dest (if (= destination-type :topic)
+               (ActiveMQTopic. destination)
+               (ActiveMQQueue. destination))
+        pub (.createProducer ses dest)
+        pub-loop (go
+                   (loop []
+                     (when-let [mes (<! cha)]
+                       (.send pub (activemq-message mes ses))
+                       (if (.isClosed ses) (close! cha))
+                       (recur)))
+                   true)]
     cha))
 
 (defn- hook-shutdown!
@@ -109,6 +127,7 @@
   [& args]
   (let [f (first args)
         lock (promise)
+        dest "person"
         people [{:name "Mitch" :email "mwhite@foo.com"
                  :likes ["laying around" "beer" "liver and onions"]}
                 {:name "Julie" :email "jpoodle@foo.com"
@@ -122,10 +141,10 @@
                 {:name "Capt. Kirk" :email "captain@enterprise.com"
                  :likes ["the ladies" "adventure" "tribbles"]}]]
     (cond
-      (= f "publisher")
-      (let [sess (start-activemq-session! default-url)
-            pub (start-publisher! sess "person")]
-        (log/info "Created a publisher process on topic 'person'")
+      (= f "producer")
+      (let [sess (start-message-bus! default-url)
+            pub (start-producer! sess {:destination dest})]
+        (log/info "Created a producer process on topic 'person'")
         (go-loop []
           (let [p (nth people (rand-int (count people)))
                 wid (assoc p :id (rand-int 100))
@@ -134,14 +153,14 @@
             (<! (timeout 1000))
             (recur)))
         (hook-shutdown! #(deliver lock :release))
-        (hook-shutdown! #(log/info "Shutting down the publisher"))
-        (hook-shutdown! #(stop-activemq-session! sess))
+        (hook-shutdown! #(log/info "Shutting down the producer"))
+        (hook-shutdown! #(stop-message-bus! sess))
         (deref lock)
         (System/exit 0))
 
       (= f "consumer")
-      (let [sess (start-activemq-session! default-url)
-            con (start-consumer! sess "person")]
+      (let [sess (start-message-bus! default-url)
+            con (start-consumer! sess {:destination dest})]
         (log/info "Created a consumer process on topic 'person'")
         (go-loop []
           (when-let [person-bytes (<! con)]
@@ -149,17 +168,17 @@
             (recur)))
         (hook-shutdown! #(deliver lock :release))
         (hook-shutdown! #(log/info "Shutting down the consumer"))
-        (hook-shutdown! #(stop-activemq-session! sess))
+        (hook-shutdown! #(stop-message-bus! sess))
         (deref lock)
         (System/exit 0))
 
       :else
-      (log/info "Good day. Please provide either 'consumer' or 'publisher' as an argument"))))
+      (log/info "Good day. Please provide either 'consumer' or 'producer' as an argument"))))
 
 
 (comment
-  (def ses (start-activemq-session! default-url :username "fredly" :password "foo"))
-  (start-activemq-session! default-url)
+  (def ses (start-message-bus! "vm://localhost?broker.persistent=false" :username "fredly" :password "foo"))
+  ses
   (def consumer (go-loop []
                   (when-let [m (<! c)]
                     (log/info "this: " m)
@@ -181,5 +200,5 @@
   (close! ppub)
 
   (close! c)
-  (stop-activemq-session! ses)
+  (stop-message-bus! ses)
   )

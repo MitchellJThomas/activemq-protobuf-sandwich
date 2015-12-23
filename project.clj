@@ -1,8 +1,8 @@
-(defproject mitchelljthomas/activemq-protobuf-sandwich "0.2.0"
+(defproject mitchelljthomas/activemq-protobuf-sandwich "0.3.0"
   :url "https://github.com/MitchellJThomas/activemq-protobuf-sandwich"
    :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
-  :description "An example of using Apache ActiveMQ and Google Protobuf with Clojure."
+  :description "A thin Clojar wrapper for Apache ActiveMQ. A study using ActiveMQ and Google Protobuf together."
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojure/core.async "0.2.374"]
                  [org.apache.activemq/activemq-client "5.13.0"]
@@ -13,5 +13,5 @@
   :main ^:skip-aot message-bus.core
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all}
-             :dev {:dependencies [[org.apache.activemq/activemq-broker "5.13.0"]]}}
-  )
+             :dev {:dependencies [[org.apache.activemq/activemq-broker "5.13.0"]]}})
+
