@@ -26,6 +26,7 @@
 
 (defn start-message-bus!
   [broker & {username :username password :password max-connections :max-connections :or {max-connections 1}}]
+  {:pre [(.contains broker "://")]}
   "Returns an ActiveMQ connection which has been started.
      It currently supports the following optional named
      arguments (refer to ActiveMQ docs for more details about them): :username, :password"
@@ -51,6 +52,9 @@
   session. The chan will close when the session is terminated.
   Destination type supports keywords :topic and :destination"
   [message-bus {:keys [destination destination-type] :or {destination-type :topic}}]
+  {:pre [(= (type @message-bus) MessageBus)
+         destination
+         (contains? #{:topic :queue} destination-type)]}
   (let [ch (chan)
         ;; Kinda crazy here... the key to the channel type is a set
         _ (swap! message-bus #(assoc-in % [:channels :consumers #{destination destination-type}] ch))
@@ -95,6 +99,9 @@
   provided destination using the given message-bus.  The chan will close when
   the message-bus has closed. Destination type supports keywords :topic and :destination."
   [message-bus {:keys [destination destination-type] :or {destination-type :topic}}]
+  {:pre [(= (type @message-bus) MessageBus)
+         destination
+         (contains? #{:topic :queue} destination-type)]}
   (let [cha (chan)
         _ (swap! message-bus #(assoc-in % [:channels :publishers #{destination destination-type}] cha))
         ses (:session @message-bus)
@@ -121,6 +128,7 @@
   [& args]
   (let [f (first args)
         lock (promise)
+        dest "person"
         people [{:name "Mitch" :email "mwhite@foo.com"
                  :likes ["laying around" "beer" "liver and onions"]}
                 {:name "Julie" :email "jpoodle@foo.com"
@@ -136,7 +144,7 @@
     (cond
       (= f "producer")
       (let [sess (start-message-bus! default-url)
-            pub (start-producer! sess "person")]
+            pub (start-producer! sess {:destination dest})]
         (log/info "Created a publisher process on topic 'person'")
         (go-loop []
           (let [p (nth people (rand-int (count people)))
@@ -153,7 +161,7 @@
 
       (= f "consumer")
       (let [sess (start-message-bus! default-url)
-            con (start-consumer! sess "person")]
+            con (start-consumer! sess {:destination dest})]
         (log/info "Created a consumer process on topic 'person'")
         (go-loop []
           (when-let [person-bytes (<! con)]
@@ -194,14 +202,4 @@
 
   (close! c)
   (stop-activemq-session! ses)
-
-  
-  (def cc (start-consumer! ses   {:destination "/foo"}))
-  cc
-  ses
-  (def cq (start-consumer! ses   {:destination "/foo" :destination-type :queue}))
-  (def pc (start-publisher! ses  {:destination "/foo"}))
-  (def pq (start-publisher! ses  {:destination "/foo" :destination-type :queue}))
-
-
   )
