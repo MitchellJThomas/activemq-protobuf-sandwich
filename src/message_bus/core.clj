@@ -38,12 +38,13 @@
 
 (defn stop-message-bus!
   [message-bus]
+  {:pre [(= (type @message-bus) MessageBus)]}
   (let [{:keys [session connection channels]} @message-bus
         {:keys [producers consumers]} channels]
     (dorun (map close! (vals producers)))
     (dorun (map close! (vals consumers)))
-    (.close session)
-    (.close connection)
+    (if session (.close session))
+    (if connection (.close connection))
     (reset! message-bus (make-message-bus))))
 
 (defn start-consumer!
@@ -52,6 +53,7 @@
   Destination type supports keywords :topic and :queue"
   [message-bus {:keys [destination destination-type] :or {destination-type :topic}}]
   {:pre [(= (type @message-bus) MessageBus)
+         (:session @message-bus)
          destination
          (contains? #{:topic :queue} destination-type)]}
   (let [ch (chan)
@@ -100,6 +102,7 @@
   [message-bus {:keys [destination destination-type] :or {destination-type :topic}}]
   {:pre [(= (type @message-bus) MessageBus)
          destination
+         (:session @message-bus)
          (contains? #{:topic :queue} destination-type)]}
   (let [cha (chan)
         _ (swap! message-bus #(assoc-in % [:channels :producers #{destination destination-type}] cha))

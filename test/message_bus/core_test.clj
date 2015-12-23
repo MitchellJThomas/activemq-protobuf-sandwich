@@ -38,6 +38,14 @@
       (is (false? (put! publi person)))
       (is (nil? (<!! consu))))))
 
+(deftest using-stopped-message-bus
+  (testing "Using a stopped message bus"
+    (let [mb (start-message-bus! "vm://localhost?broker.persistent=false")]
+      (is (stop-message-bus! mb))
+      (is (thrown-with-msg? AssertionError #"session" (start-consumer! mb {:destination "fail"})))
+      (is (thrown-with-msg? AssertionError #"session" (start-producer! mb {:destination "fail"})))
+      (is (stop-message-bus! mb)))))
+
 ;; known to fail
 (deftest conpro-multi-pub
   (testing "Multiple producers, single consumer"
