@@ -2,8 +2,7 @@
   (:require
    [clojure.edn]
    [clojure.core.async :refer [go timeout put! <! >! chan >!! close! take! go-loop]]
-   [clojure.tools.logging :as log]
-   [message-bus.messages :as m])
+   [clojure.tools.logging :as log])
   (:import
    [javax.jms MessageListener Session BytesMessage TextMessage]
    [org.apache.activemq ActiveMQConnectionFactory]
@@ -150,14 +149,13 @@
         (log/info "Created a producer process on topic 'person'")
         (go-loop []
           (let [p (nth people (rand-int (count people)))
-                wid (assoc p :id (rand-int 100))
-                data (m/person-builder wid)]
+                data (str (assoc p :id (rand-int 100)))]
             (>! pub data)
             (<! (timeout 1000))
             (recur)))
-        (hook-shutdown! #(deliver lock :release))
-        (hook-shutdown! #(log/info "Shutting down the producer"))
-        (hook-shutdown! #(stop-message-bus! sess))
+        (hook-shutdown! #(do (deliver lock :release)
+                             (log/info "Shutting down the producer")
+                             (stop-message-bus! sess)))
         (deref lock)
         (System/exit 0))
 
@@ -166,8 +164,8 @@
             con (start-consumer! sess {:destination dest})]
         (log/info "Created a consumer process on topic 'person'")
         (go-loop []
-          (when-let [person-bytes (<! con)]
-            (log/info "person: " (m/person-builder person-bytes))
+          (when-let [person-edn (<! con)]
+            (log/info "person: " (clojure.edn/read-string person-edn))
             (recur)))
         (hook-shutdown! #(deliver lock :release))
         (hook-shutdown! #(log/info "Shutting down the consumer"))
@@ -190,6 +188,7 @@
   (>!! p "hey!")
   (>!! p [{:this (rand) :that (rand)} [1 2 3] {:ding true :dong false}])
 
+  (require '[message-bus.messages :as m])
   (def person-consumer (go-loop []
                          (when-let [person-bytes (<! pcon)]
                            (log/info "m: " person-bytes)
