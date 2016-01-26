@@ -1,4 +1,4 @@
-(defproject mitchelljthomas/activemq-protobuf-sandwich "0.3.0"
+(defproject mitchelljthomas/activemq-protobuf-sandwich "0.4.0"
   :url "https://github.com/MitchellJThomas/activemq-protobuf-sandwich"
    :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
