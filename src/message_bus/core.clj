@@ -1,7 +1,7 @@
 (ns message-bus.core
   (:require
    [clojure.edn]
-   [clojure.core.async :refer [go timeout put! <! >! chan >!! close! take! go-loop]]
+   [clojure.core.async :refer [go timeout put! <! >! chan >!! <!! close! take! go-loop]]
    [clojure.tools.logging :as log])
   (:import
    [javax.jms MessageListener Session BytesMessage TextMessage]
@@ -40,8 +40,14 @@
   {:pre [(= (type @message-bus) MessageBus)]}
   (let [{:keys [session connection channels]} @message-bus
         {:keys [producers consumers]} channels]
-    (dorun (map close! (vals producers)))
-    (dorun (map close! (vals consumers)))
+    ;; signal the pub-loops to stop
+    (run! #(close! (:pub-chan %)) (vals producers))
+    ;; signal the consumers work is stopped
+    (run! close! (vals consumers))
+    ;; wait until all the publisher loops are done doing work
+    ;; have have stopped before yanking the rug out from underneath them
+    (run! #(<!! (:pub-loop %)) (vals producers))
+    ;; yank the rug out
     (if session (.close session))
     (if connection (.close connection))
     (reset! message-bus (make-message-bus))))
@@ -104,7 +110,6 @@
          (:session @message-bus)
          (contains? #{:topic :queue} destination-type)]}
   (let [cha (chan)
-        _ (swap! message-bus #(assoc-in % [:channels :producers #{destination destination-type}] cha))
         ses (:session @message-bus)
         dest (if (= destination-type :topic)
                (ActiveMQTopic. destination)
@@ -117,6 +122,7 @@
                        (if (.isClosed ses) (close! cha))
                        (recur)))
                    true)]
+    (swap! message-bus #(assoc-in % [:channels :producers #{destination destination-type}] {:pub-chan cha :pub-loop pub-loop} ))
     cha))
 
 (defn- hook-shutdown!
@@ -167,9 +173,9 @@
           (when-let [person-edn (<! con)]
             (log/info "person: " (clojure.edn/read-string person-edn))
             (recur)))
-        (hook-shutdown! #(deliver lock :release))
-        (hook-shutdown! #(log/info "Shutting down the consumer"))
-        (hook-shutdown! #(stop-message-bus! sess))
+        (hook-shutdown! #(do (deliver lock :release)
+                             (log/info "Shutting down the consumer")
+                             (stop-message-bus! sess)))
         (deref lock)
         (System/exit 0))
 
